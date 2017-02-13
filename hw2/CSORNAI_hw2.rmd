@@ -1,0 +1,334 @@
+---
+title: 'DA3 assignment2: Panel data CO2'
+author: "CSORNAI, Gyula"
+date: "February 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## TASK1: Data aquisition and transformation
+The data is originated from [World Data Bank - WDI](http://databank.worldbank.org) with using R WDI API. After finding the code for the indicators one can download the data and transform further locally.
+
+### Descriptive statistics
+
+```{r getData, echo=FALSE, include=FALSE}
+rm(list = ls())
+library(WDI)
+library(data.table)
+library(ggplot2)
+library(pander)
+library(stargazer)
+library(tidyr)
+library(dplyr)
+library(plm)
+#TASK1
+#look for GDP related data I can potentially use
+gdp_inds <- WDIsearch('gdp')
+#grep("2005", gdp_inds, value = TRUE )
+#identify unique identified
+gdpppCode <- gdp_inds[match("GDP per capita, PPP (constant 2005 international $)",gdp_inds[,2]),1]
+#getting data
+dat = WDI(
+  indicator=gdpppCode, 
+  start=1992, end=2016)
+#full of regional aggregated garbage data
+dt <- data.table(dat)
+#filtering down the 47 non-country data from the beginning of the data frame
+exclusionList <-dt[,.(itemCnt=.N),by=.(code = dt$iso2c)][1:47,1]
+gdpData <- subset(dt, !(dt$iso2c %in%  exclusionList$code))
+
+#collecting CO2 data
+co2_inds <- WDIsearch('co2')
+#CO2 emissions (metric tons per capita)
+#CO2 emissions (kt)
+co2code <- co2_inds[match("CO2 emissions (metric tons per capita)", co2_inds[,2]),1]
+co2dat = WDI(
+  indicator=co2code, 
+  start=1992, end=2016)
+co2dt <- data.table(co2dat)
+co2Data <- subset(co2dt, !(co2dt$iso2c %in%  exclusionList$code))
+
+#merging, with multiple key match
+panelData <-merge(gdpData, co2Data, 
+                  by.x = c("iso2c", "year","country"), 
+                  by.y = c("iso2c", "year", "country") )
+
+#renaming columns
+names(panelData)[names(panelData) == "NY.GDP.PCAP.PP.KD"] = "GDPPC2005"
+names(panelData)[names(panelData) == "EN.ATM.CO2E.PC"] = "CO2EM"
+
+fullPanelData <- panelData
+#checking for countries with almost full coverage
+panelCompleteness <- panelData[!is.na(panelData$CO2EM) & !is.na(panelData$GDPPC2005),
+                               .(cntY = .N),
+                               by=country]
+#definition of almost full
+countryInclusion <- panelCompleteness[cntY>21]
+#panelDataOriginal <- panelData
+panelData <- subset(panelData,(panelData$country %in% countryInclusion$country))
+
+#transformations - both skewed, need logs
+#metric kilotons will produce more than 25% of values below 1, use metric tons instead
+pander(summary(panelData))
+panelData$CO2EMT <- panelData$CO2EM*1000
+panelData$lnco2em <- log(panelData$CO2EMT)
+panelData$lngdppc <- log(panelData$GDPPC2005)
+```
+The statistics above and histograms below show the both the GDPPC and the CO2 data are skewed, so taking a logs of the levels can be justified.
+```{r histogram1, warning=FALSE, fig.width=4, fig.height=3,echo=FALSE,out.extra='style="float:left"'}
+ggplot(panelData)+aes(x=GDPPC2005)+
+  geom_histogram(fill='dodgerblue4', bins = 30)+
+  labs(
+    x="GDP per capita levels in all years 
+    constant 2005 prices",
+    title="Histogram of GDP per capita 
+    distribution in years 1992-2016"
+  )+
+  theme_bw()
+```
+```{r histogram2, warning=FALSE, fig.width=4, fig.height=3,echo=FALSE}
+ggplot(panelData)+aes(x=CO2EMT)+
+  geom_histogram(fill='indianred', bins = 30)+
+  labs(
+    x="CO2 emission levels in all years",
+    title="Histogram of CO2 emission in 
+    metric kilotons 1992-2016"
+  )+
+  theme_bw()
+
+```
+
+
+### Dependency and time dimension of the data
+After taking logs, the following chart shows the dependendy between the variables in a selected 10y subsample of the data, clearly showing poritive rerlationship between the logs
+in the selected years.
+
+
+```{r timedim, echo=FALSE}
+
+lpan <- subset(panelData, panelData$year > 2003 & panelData$year < 2014)
+ggplot(lpan)+aes(x=lngdppc, y=lnco2em)+
+  geom_point(size=1, col='orange')+
+  geom_smooth(method='lm')+
+  facet_grid(year~.)+
+  labs(
+    x="Log GDDP per capita in the given year",
+    y="Log CO2 emission the given year",
+    title="Relationship between log CO2 emission and 
+    log GDP per capita  2004-2013"
+  )+
+  theme_bw()
+
+```
+
+
+## TASK2: First difference estimations
+
+
+```{r fdtable1gen, echo=FALSE, include=FALSE}
+
+#this needs no megic on a sorted set
+fd1 <- plm(log(CO2EMT) ~ log(GDPPC2005), data = panelData, model = 'fd')
+myFDFunction <- function(lagSize){
+  fd_panel <- panelData %>%
+    group_by(country) %>%
+    mutate(
+      lag_gdp = lag(GDPPC2005,lagSize),
+      lag_co2 = lag(CO2EMT,lagSize)) %>%    
+    filter(!is.na(lag_gdp)) %>%
+    mutate(
+      dlgdp = log(GDPPC2005)-log(lag_gdp),
+      dlco2 = log(CO2EMT)-log(lag_co2))
+  return(fd_panel)
+}
+fd1_panel <- myFDFunction(1)
+fd2_panel <- myFDFunction(2)
+fd3_panel <- myFDFunction(3)
+fd6_panel <- myFDFunction(6)
+
+fd1A <-  lm(dlco2 ~ dlgdp, data = fd1_panel)
+fd2 <-  lm(dlco2 ~ dlgdp, data = fd2_panel)
+fd3 <-  lm(dlco2 ~ dlgdp, data = fd3_panel)
+fd6 <-  lm(dlco2 ~ dlgdp, data = fd6_panel)
+
+```
+
+The following chart shows the results of first difference analysis, generated by 1, 2, 3 and 6 lags. The results are better if we are using more lags, however the number of observations get slower as well. Ultimately the value 3 seems to be a good balance between accuracy and number of observations.
+
+
+```{r table1, results='asis', echo=FALSE}
+
+stargazer(
+  list(fd1, fd1A, fd2, fd3, fd6), digits = 2, 
+column.labels = c('FD (lag=1)', 'FD (lag=1, crosscheck)', 'FD (lag=2)', 'FD (lag=3)', 'FD (lag=6)'),
+model.names = FALSE, dep.var.labels.include = FALSE, 
+dep.var.caption = 'Dependent variable: log(CO2)',omit = "Constant",
+single.row = TRUE,
+type="html"
+)
+
+
+```
+
+
+## TASK3: Panel data modeling variants
+The  following table shows a comparison between the first difference model with 3 lags, 3 OLS models (out of which 2 have already been visualized above), fixed effect model with and without time dummies and long differences model. 
+
+```{r panelmodels, echo=FALSE, include=FALSE}
+#TASK3
+olsPanel1995 <- subset(panelData, panelData$year == 1995)
+ols1995 <- lm(lnco2em ~ lngdppc,data = olsPanel1995)
+olsPanel2007 <- subset(panelData, panelData$year == 2007)
+ols2007 <- lm(lnco2em ~ lngdppc,data = olsPanel2007)
+olsPanel2013 <- subset(panelData, panelData$year == 2013)
+ols2013 <- lm(lnco2em ~ lngdppc,data = olsPanel2013)
+
+#within is fixed effect estimation
+fe <- plm(log(CO2EMT) ~ log(GDPPC2005), data = panelData, model = 'within')
+#add year dummies to FE model
+fewyd <- plm(log(CO2EMT) ~ log(GDPPC2005) + year, data = panelData, model = 'within')
+
+#we have good data until 2013 only
+ld_panel <- panelData %>%
+  filter(panelData$year==1992 | panelData$year==2013) %>%  
+  group_by(country) %>%
+    mutate(
+      lag_gdp = lag(GDPPC2005),
+      lag_co2 = lag(CO2EMT)) %>%    
+    filter(!is.na(lag_gdp)) %>%
+    mutate(
+      dlgdp = log(GDPPC2005)-log(lag_gdp),
+      dlco2 = log(CO2EMT)-log(lag_co2))
+
+ld <-  lm(dlco2 ~ dlgdp, data = ld_panel)
+
+```
+
+
+
+
+```{r table2, results='asis', echo=FALSE}
+stargazer(
+  list(fd3, ols1995, ols2007, ols2013, fe, fewyd, ld), digits = 2, 
+  column.labels = c('FD (lag=3)', 'OLS1995', 'OLS2007', 'OLS2013','FE', 'FE w/ year dummies', 'LD'),
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: log(CO2)',
+  single.row = TRUE,
+  type="html"
+)
+
+```
+
+## TASK4: Interpretation of the coefficients for all models and causality
+
+### First difference with 3 lags
+**Coefficient**
+
+Comparing 2 countries or 2 time periods with a 3 year time difference in those cases where GDP per capita has increased with 1% more in the 3 years time CO2 emission in metric tons is expected to increase with  0.62% more on average.
+
+**Causality**
+
+First difference method will de-trend each series, so it will eliminate trend effect, and indicate causality.
+
+### OLS in different years
+**Coefficient**
+
+Comparing 2 countries observed in the same year in the one where the relative GDP per capita is 1% higher the CO2 emission is {y1995=1.22%,y2007=1.2%, y=2013=1.15%} higher on average.
+
+**Causality**
+
+The OLS regressions by themselves do not provide any evidence on causality. The fact that the coefficient is vwey close in very distant years proves that the 2 variables are correlated.
+
+### Fixed effect without year dummies
+**Coefficient**
+
+On average, CO2 emission was larger by 0.66% above its long term average (measured between 1992 and 2013/2016) in the country where GDP was 1% above the long-term mean of the country.
+
+**Causality**
+
+Fixed effect by itself already controls everything that is unchanged in the different countries, so this does bring us closer to causal effect.
+
+### Fixed effect with year dummies
+**Coefficient**
+
+On average, CO2 emission was larger by 0.71% above its long term average (measured between 1992 and 2013/2016) in the country where GDP was 1% above the long-term mean of the country, if we take out the year specific changes for the given country.
+
+**Causality**
+
+Fixed effect by itself already controls everything that is unchanged in the different countries, contolling for the year gives an even stronger result.
+
+### Long differences model
+**Coefficient**
+
+Comparing 2 countries with different changes in GDP between 1992 and 2016, on average CO2 emission increased by 0.63% more, where the GDP increased 1% more.
+
+**Causality**
+
+Long differences have the same de-trending effect as first differences, eliminateing trending effect. The strenght is decreased by the fact that we have as many observations only, as many countries we have in the 1992 and 2013.
+
+
+### Differences and similarities
+All models show strong positive relation between the 2 variables, that does not really change over time. The FD, FE and LD models technically show the same, they are different in only those aspects that are differences in time horizons or are caused by few observations.
+The OLS models have significantly higher coefficients, but in those cases we cannot control for the variables, that are otherwise unchaged in time and country specific.
+
+
+## TASK5: Chosing model
+I would chose  fixed effect with time dummies, which captures longer run associations, which in case of CO2 emissions draw clearer picture. The SE is a clustered standard error. With cross-section – time series regressions the standard errors need to be clustered at the level of the cross-sectional units. Cluster standard errors are robust to serial correlation as well as heteroskedasticity.
+
+```{r unbalanced, echo=FALSE}
+#TASK6
+fullPanelData$CO2EMT <- fullPanelData$CO2EM*1000
+fullPanelData$lnco2em <- log(fullPanelData$CO2EMT)
+fullPanelData$lngdppc <- log(fullPanelData$GDPPC2005)
+olsFullPanel2007 <- subset(fullPanelData, fullPanelData$year == 2007)
+
+olsFull2007 <- lm(lnco2em ~ lngdppc,data = olsPanel2007)
+feFull <- plm(log(CO2EMT) ~ log(GDPPC2005), data = fullPanelData, model = 'within')
+fd3Full_panel <- fullPanelData %>%
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005,3),
+    lag_co2 = lag(CO2EMT,3)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+fd3Full <-  lm(dlco2 ~ dlgdp, data = fd3Full_panel)
+
+ldFull_panel <- fullPanelData %>%
+  filter(fullPanelData$year==1992 | fullPanelData$year==2013) %>%  
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005),
+    lag_co2 = lag(CO2EMT)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+
+ldFull <-  lm(dlco2 ~ dlgdp, data = ldFull_panel)
+
+```
+
+## TASK6: Regression on unbalanced panels
+### Missing observations
+Missing observations may come from not gatheted statistics or not finalized results. Many results are missing in the early 90's from all type of countries, but some data is missing from the years 2014-2016 from developped countries, too. My exclusion list contained some countries, which have changed in the last decades, i.e. Serbia and Montenegro, which does not have a full panel.
+### Models on unbalanced panel
+
+```{r table3, results='asis', echo=FALSE}
+stargazer(
+  list(olsFull2007, feFull, fd3Full, ldFull ), digits = 2, 
+  column.labels = c('OLS2007', 'FE', 'FD(3)', 'LD'),
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: log(CO2)',omit = "Constant",
+  single.row = TRUE,
+  type="html"
+)
+
+```
+
+### Comparison with balanced panel
+The unbalanced panel produced relatively similar number compared to the balanced panel. The fundamental question is whether the missing observations would have changed the pattern ort not.

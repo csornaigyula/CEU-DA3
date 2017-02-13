@@ -51,7 +51,13 @@ panelData <- subset(panelData,(panelData$country %in% countryInclusion$country))
 
 #descriptive statistics
 summary(panelData)
-ggplot(panelData)+aes(x=year)+geom_bar()
+
+#transformations - both skewed, need logs
+#metric kilotons will produce more than 25% of values below 1, use metric tons instead
+panelData$CO2EMT <- panelData$CO2EM*1000
+panelData$lnco2em <- log(panelData$CO2EMT)
+panelData$lngdppc <- log(panelData$GDPPC2005)
+
 #plot 2 main variables
 library(ggplot2)
 ggplot(panelData)+aes(x=GDPPC2005)+
@@ -70,11 +76,7 @@ ggplot(panelData)+aes(x=CO2EMT)+
   )+
   theme_bw()
 
-#transformations - both skewed, need logs
-#metric kilotons will produce more than 25% of values below 1, use metric tons instead
-panelData$CO2EMT <- panelData$CO2EM*1000
-panelData$lnco2em <- log(panelData$CO2EMT)
-panelData$lngdppc <- log(panelData$GDPPC2005)
+
 
 
 pan <- subset(panelData, panelData$year > 2003 & panelData$year < 2014)
