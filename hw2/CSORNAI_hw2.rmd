@@ -2,7 +2,10 @@
 title: 'DA3 assignment2: Panel data CO2'
 author: "CSORNAI, Gyula"
 date: "February 13, 2017"
-output: html_document
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -10,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## TASK1: Data aquisition and transformation
+
+
 The data is originated from [World Data Bank - WDI](http://databank.worldbank.org) with using R WDI API. After finding the code for the indicators one can download the data and transform further locally.
 
 ### Descriptive statistics
@@ -103,6 +108,8 @@ ggplot(panelData)+aes(x=CO2EMT)+
 
 
 ### Dependency and time dimension of the data
+
+
 After taking logs, the following chart shows the dependendy between the variables in a selected 10y subsample of the data, clearly showing poritive rerlationship between the logs
 in the selected years.
 
@@ -175,6 +182,8 @@ type="html"
 
 
 ## TASK3: Panel data modeling variants
+
+
 The  following table shows a comparison between the first difference model with 3 lags, 3 OLS models (out of which 2 have already been visualized above), fixed effect model with and without time dummies and long differences model. 
 
 ```{r panelmodels, echo=FALSE, include=FALSE}
@@ -224,7 +233,10 @@ stargazer(
 
 ## TASK4: Interpretation of the coefficients for all models and causality
 
+
 ### First difference with 3 lags
+
+
 **Coefficient**
 
 Comparing 2 countries or 2 time periods with a 3 year time difference in those cases where GDP per capita has increased with 1% more in the 3 years time CO2 emission in metric tons is expected to increase with  0.62% more on average.
@@ -234,6 +246,8 @@ Comparing 2 countries or 2 time periods with a 3 year time difference in those c
 First difference method will de-trend each series, so it will eliminate trend effect, and indicate causality.
 
 ### OLS in different years
+
+
 **Coefficient**
 
 Comparing 2 countries observed in the same year in the one where the relative GDP per capita is 1% higher the CO2 emission is {y1995=1.22%,y2007=1.2%, y=2013=1.15%} higher on average.
@@ -243,6 +257,8 @@ Comparing 2 countries observed in the same year in the one where the relative GD
 The OLS regressions by themselves do not provide any evidence on causality. The fact that the coefficient is vwey close in very distant years proves that the 2 variables are correlated.
 
 ### Fixed effect without year dummies
+
+
 **Coefficient**
 
 On average, CO2 emission was larger by 0.66% above its long term average (measured between 1992 and 2013/2016) in the country where GDP was 1% above the long-term mean of the country.
@@ -252,6 +268,8 @@ On average, CO2 emission was larger by 0.66% above its long term average (measur
 Fixed effect by itself already controls everything that is unchanged in the different countries, so this does bring us closer to causal effect.
 
 ### Fixed effect with year dummies
+
+
 **Coefficient**
 
 On average, CO2 emission was larger by 0.71% above its long term average (measured between 1992 and 2013/2016) in the country where GDP was 1% above the long-term mean of the country, if we take out the year specific changes for the given country.
@@ -271,6 +289,8 @@ Long differences have the same de-trending effect as first differences, eliminat
 
 
 ### Differences and similarities
+
+
 All models show strong positive relation between the 2 variables, that does not really change over time. The FD, FE and LD models technically show the same, they are different in only those aspects that are differences in time horizons or are caused by few observations.
 The OLS models have significantly higher coefficients, but in those cases we cannot control for the variables, that are otherwise unchaged in time and country specific.
 
@@ -313,8 +333,10 @@ ldFull <-  lm(dlco2 ~ dlgdp, data = ldFull_panel)
 
 ```
 
-## TASK6: Regression on unbalanced panels
+## TASK6: Analysis on unbalanced panels
 ### Missing observations
+
+
 Missing observations may come from not gatheted statistics or not finalized results. Many results are missing in the early 90's from all type of countries, but some data is missing from the years 2014-2016 from developped countries, too. My exclusion list contained some countries, which have changed in the last decades, i.e. Serbia and Montenegro, which does not have a full panel.
 ### Models on unbalanced panel
 
@@ -331,4 +353,223 @@ stargazer(
 ```
 
 ### Comparison with balanced panel
-The unbalanced panel produced relatively similar number compared to the balanced panel. The fundamental question is whether the missing observations would have changed the pattern ort not.
+
+
+The unbalanced panel produced relatively similar number compared to the balanced panel. The fundamental question is whether the missing observations would have changed the pattern or not.
+
+## TASK7: Using confounder
+My theory was that the GDP percentage of the value added by the industry could be a potentially good confounder, as industry is typically a potential high producer of CO2.
+
+```{r confounder,echo=FALSE}
+#TASK7 confounder
+#Industry, value added (% of GDP) (NV.IND.TOTL.ZS)
+industryPctCode <- "NV.IND.TOTL.ZS"
+inddat = WDI(
+  indicator=industryPctCode, 
+  start=1992, end=2016)
+indDT <- data.table(inddat)
+indGDPPctData <- subset(indDT, !(indDT$iso2c %in%  exclusionList$code))
+#summary(indGDPPctData)
+names(indGDPPctData)[names(indGDPPctData) == industryPctCode] = "IndPct"
+extendedFullPanelData2 <-merge(fullPanelData, indGDPPctData, 
+                              by.x = c("iso2c", "year","country"), 
+                              by.y = c("iso2c", "year", "country") )
+
+#head(extendedFullPanelData2)
+panelCompleteness3 <- extendedFullPanelData2[!is.na(extendedFullPanelData2$CO2EM) & 
+                                              !is.na(extendedFullPanelData2$GDPPC2005) &
+                                              !is.na(extendedFullPanelData2$IndPct),
+                                            .(cntY = .N),
+                                            by=country]
+
+countryInclusion3 <- panelCompleteness3[cntY>20]
+panelData2 <- subset(extendedFullPanelData2,(extendedFullPanelData2$country %in% countryInclusion$country))
+
+
+panelData2$CO2EMT <- panelData2$CO2EM*1000
+panelData2$lnco2em <- log(panelData2$CO2EMT)
+panelData2$lngdppc <- log(panelData2$GDPPC2005)
+olsConfPanel2007 <- subset(panelData2, panelData2$year == 2007)
+
+olsConf2007 <- lm(lnco2em ~ lngdppc + IndPct,data = olsConfPanel2007)
+feConf <- plm(log(CO2EMT) ~ log(GDPPC2005) + IndPct, data = panelData2, model = 'within')
+fd3ConfPanel <- panelData2 %>%
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005,3),
+    lag_co2 = lag(CO2EMT,3),
+    lag_indpct = lag(IndPct,3)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2),
+    dindpct = IndPct - lag_indpct)
+fd3Conf <-  lm(dlco2 ~ dlgdp + dindpct, data = fd3ConfPanel)
+
+ldConfPanel <- panelData2 %>%
+  filter(panelData2$year==1992 | panelData2$year==2013) %>%  
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005),
+    lag_co2 = lag(CO2EMT),
+    lag_indpct = lag(IndPct)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2),
+    dindpct = IndPct - lag_indpct)
+
+ldConf <-  lm(dlco2 ~ dlgdp + dindpct, data = ldConfPanel)
+
+```
+
+### Models
+The following charts show the models with confounders. Surprisingly enough, although this counfounder is shows positive relation on a statistically significant level, the coefficient is nearly 0 compared to the log GDP per capita. The coefficients of OLS, FE, FD(3) and LD models have changed a bit, but not significantly.
+
+
+```{r table4, results='asis', echo=FALSE}
+stargazer(
+  list(olsConf2007, feConf , fd3Conf, ldConf ), digits = 2, 
+  column.labels = c('OLS2007', 'FE', 'FD(3)', 'LD'),
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: log(CO2), confounder GDP pct of industry added value',
+  single.row = TRUE,
+  type="html"
+)
+
+```
+
+## TASK8: Heterogeneity of relationship
+
+
+The following chart shows the levels of CO2 emission on GDP per capita in 2007 with simple linear model and Lowess non-parametric regression. The majority of the countries have GDP per capita under the level of 24000USD, this is the 3rd quantile. Analyzing the plot and the summary statistics, I made my choice to create 2 groups, and do cutoff at 30000USD, which is around 80% from one side, and the trend that the data assumes chages around this value (distribution of the observations starts having much stringer deviation from the linear trend driven by the lower 75%, Lowess curve has a strong deviation from linear round here). This intuitively tells, that rich countries CO2 emission model is different from less developped countries.
+
+
+```{r cutoff, echo=FALSE}
+panel2007 <- subset(panelData,panelData$year==2007)
+pander(summary(panel2007))
+ggplot(panel2007)+
+  aes(x=GDPPC2005, y=CO2EMT)+
+  geom_point()+
+  geom_smooth(method='lm')+
+  geom_smooth(method='loess', col='indianred')+
+  labs(
+    x="Levels of GDP per capita in 2007",
+    y="Levels of CO2 emission in metric tons in 2007",
+    title="Distribution on CO2 emission on GDPPC values 
+    with nonparametric and linear estimations"
+  )+
+  theme_bw()
+```
+
+```{r groupanalysis, echo=FALSE}
+meanGDPPC2007 <- mean(panel2007$GDPPC2005)
+panel2007$ccat <- ifelse(panel2007$GDPPC2005 < 30000,0,1)
+
+sgPanelData <- merge(panelData, panel2007,
+                     by.x = c("iso2c","country"), 
+                     by.y = c("iso2c", "country"))
+
+sgPanelfDf <- data.frame(sgPanelData)
+#head(sgPanelData)
+sgPanelData$year.y <- NULL
+sgPanelData$GDPPC2005.y <- NULL
+sgPanelData$CO2EM.y <- NULL
+sgPanelData$CO2EM.x <- NULL
+sgPanelData$CO2EMT.y <- NULL
+sgPanelData$lnco2em.y <- NULL
+sgPanelData$lngdppc.y <- NULL
+#head(sgPanelData)
+names(sgPanelData)[names(sgPanelData) == "year.x"] = "year"
+names(sgPanelData)[names(sgPanelData) == "GDPPC2005.x"] = "GDPPC2005"
+names(sgPanelData)[names(sgPanelData) == "CO2EMT.x"] = "CO2EMT"
+names(sgPanelData)[names(sgPanelData) == "lnco2em.x"] = "lnco2em"
+names(sgPanelData)[names(sgPanelData) == "lngdppc.x"] = "lngdppc"
+#head(sgPanelData)
+
+sgPanelData0 <- subset(sgPanelData,sgPanelData$ccat==0)
+sgPanelData0$ccat <- NULL
+sgPanelData1 <- subset(sgPanelData,sgPanelData$ccat==1)
+sgPanelData1$ccat <- NULL
+
+
+#head(sgPanelData0)
+#head(panelData)
+olsSG0 <- lm(lnco2em ~ lngdppc,data = sgPanelData0)
+#feSG0 <- plm(log(CO2EMT) ~ log(GDPPC2005), data = panelData, model = 'within')
+#throws error, i have no idea why
+panelfd3SG0 <- sgPanelData0 %>%
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005,3),
+    lag_co2 = lag(CO2EMT,3)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+fd3SG0 <-  lm(dlco2 ~ dlgdp, data = panelfd3SG0)
+
+panelldSG0 <- sgPanelData0 %>%
+  filter(sgPanelData0$year==1992 | sgPanelData0$year==2013) %>%  
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005),
+    lag_co2 = lag(CO2EMT)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+
+ldSG0 <-  lm(dlco2 ~ dlgdp, data = panelldSG0)
+################
+olsSG1 <- lm(lnco2em ~ lngdppc,data = sgPanelData1)
+#feSG0 <- plm(log(CO2EMT) ~ log(GDPPC2005), data = panelData, model = 'within')
+#throws error, i have no idea why
+panelfd3SG1 <- sgPanelData1 %>%
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005,3),
+    lag_co2 = lag(CO2EMT,3)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+fd3SG1 <-  lm(dlco2 ~ dlgdp, data = panelfd3SG1)
+
+panelldSG1 <- sgPanelData1 %>%
+  filter(sgPanelData1$year==1992 | sgPanelData1$year==2013) %>%  
+  group_by(country) %>%
+  mutate(
+    lag_gdp = lag(GDPPC2005),
+    lag_co2 = lag(CO2EMT)) %>%    
+  filter(!is.na(lag_gdp)) %>%
+  mutate(
+    dlgdp = log(GDPPC2005)-log(lag_gdp),
+    dlco2 = log(CO2EMT)-log(lag_co2))
+
+ldSG1 <-  lm(dlco2 ~ dlgdp, data = panelldSG1)
+```
+
+
+The following chart shows the results broken up to 2 gorups, using balanced panels. The OLS models show, that comparing 2 countries in the poor subset 1% GDP percentage difference will be nealry double value in CO2 emission percentage difference, compared to the value comparing 2 rich countries with 1% GDP percentage difference - in poor countries more GDP will co-occur with significantly more CO2 emission.
+
+
+From the other side the FD(3) and LD coefficients of rich countries are significantly higher, which means, that if we are comparing 2 rich countries or 2 time periods with a 3 year time difference in rich countries in those cases where GDP per capita has increased with 1% more in the 3 years time CO2 emission in metric tons more, than in poor countries - GDP per capita change in time does not influence poor countries CO2 emission as much as it does rich countries.
+
+```{r table5, results='asis', echo=FALSE}
+stargazer(
+  list(olsSG0, olsSG1, fd3SG0, fd3SG1 , ldSG0, ldSG1 ), digits = 2, 
+  column.labels = c('OLS2007poor', 'OLS2007rich', 'FD3poor', 'FD3rich', 'LDpoor', 'LDrich'),
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: log(CO2)',
+  single.row = TRUE,
+  type="html"
+)
+```
+
+## TASK9: Summary of findings
+
+1. There is evidence for positive relation between changes in GDP per capita and changes in CO2 emission - comparing countries or 2 time periods, in those cases where GDP per capita changes more, CO2 emission will also change more.
+2. This relationship is much stronger in rich countries - similar changes in GDP per capita will co-appear with higher CO2 emission changes.
+3. The value percetage generated by industry does not change the relationship significantly, CO2 emission changes will not change significantly more if the proportion of industry added value changes.
+4. As policymaker I would generate green energy policies if the GDP per capita changes, because from one side the soceity can afford more, from the other side it will come together with higher volume of pollution anyway.

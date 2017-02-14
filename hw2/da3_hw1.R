@@ -309,6 +309,7 @@ stargazer(
 #TASK8
 #2007 groups
 panel2007 <- subset(panelData,panelData$year==2007)
+summary(panel2007)
 ggplot(panel2007)+
   aes(x=GDPPC2005, y=CO2EMT)+
   geom_point()+
