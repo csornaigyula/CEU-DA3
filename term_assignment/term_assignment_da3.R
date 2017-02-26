@@ -155,7 +155,7 @@ ggplot(panelCompletenessFinal)+
   aes(x=country, y=cntY)+
   geom_col(fill='forestgreen', col='darkgreen')+
   labs(
-    x='Years',
+    x='Countries',
     y='Number of countries\nwhere both data elements are available',
     title='Panel completeness in years 1999-2012 in countries where we have at least 10 observations'
   )+
@@ -245,4 +245,83 @@ ggplot()+
   theme(axis.text.x=element_text(angle=-90, hjust=0.5, size=8))
 
 ## 3 change analysis
- 
+myFDFunction <- function(lagSize){
+  fd_panel <- panelData %>%
+    group_by(country) %>%
+    mutate(
+      lag_hitechexp = lag(hitech_exp_pct,lagSize),
+      lag_eduexp = lag(edu_exp_gdppct,lagSize)) %>%    
+    filter(!is.na(lag_hitechexp)) %>%
+    filter(!is.na(lag_eduexp)) %>%
+    mutate(
+      dhtech = hitech_exp_pct-lag_hitechexp,
+      deduex = edu_exp_gdppct - lag_eduexp
+    )
+  return(fd_panel)
+}
+
+fd1_panel <- myFDFunction(1)
+fd2_panel <- myFDFunction(2)
+fd3_panel <- myFDFunction(3)
+fd6_panel <- myFDFunction(6)
+
+fd1 <-  lm(dhtech ~ deduex, data = fd1_panel)
+fd2 <-  lm(dhtech ~ deduex, data = fd2_panel)
+fd3 <-  lm(dhtech ~ deduex, data = fd3_panel)
+
+fewyd <- plm(hitech_exp_pct ~ edu_exp_gdppct + year, data = panelData, model = 'within')
+
+stargazer(
+  list(fd1, fd2, fd3, fewyd), digits = 2, 
+  column.labels = c('FD (lag=1)', 'FD (lag=2)', 'FD (lag=3)', 'FE w/ year dummies'),
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  single.row = TRUE,
+  out="Models.html"
+)
+
+## 4- Confounders 
+
+
+panelCountryVector<-unique(panelData$iso2c)
+## Labor force with secondary education (% of total) (SL.TLF.SECO.ZS)
+labfSE = WDI(country=panelCountryVector,
+            indicator='SL.TLF.SECO.ZS', 
+            start=1999, end=2012)
+names(labfSE)[names(labfSE) == "SL.TLF.SECO.ZS"] = "labf_pct_edus"
+dtLFSE <- data.table(labfSE)
+panelCompletenessLSE <- dtLFSE[!is.na(dtLFSE$labf_pct_edus),
+                                .(cntC = .N),
+                                by=year]
+## Only the half is usable
+
+## Labor force with tertiary education (% of total) (SL.TLF.TERT.ZS)
+labfTE = WDI(country=panelCountryVector,
+             indicator='SL.TLF.TERT.ZS', 
+             start=1999, end=2012)
+names(labfTE)[names(labfTE) == "SL.TLF.TERT.ZS"] = "labf_pct_edut"
+dtLFTE <- data.table(labfTE)
+panelCompletenessLTE <- dtLFTE[!is.na(dtLFTE$labf_pct_edut),
+                               .(cntC = .N),
+                               by=year]
+## Only the half is usable 
+
+## Research and development expenditure (% of GDP) (GB.XPD.RSDV.GD.ZS)
+rndExp = WDI(country=panelCountryVector,
+             indicator='GB.XPD.RSDV.GD.ZS', 
+             start=1999, end=2012)
+names(rndExp)[names(rndExp) == "GB.XPD.RSDV.GD.ZS"] = "gdp_rnd_pct"
+dtRNDP <- data.table(rndExp)
+panelCompletenessRNDP <- dtRNDP[!is.na(dtRNDP$gdp_rnd_pct),
+                               .(cntC = .N),
+                               by=year]
+
+## ~60 usable
+
+## Expenditure on tertiary education (% of government expenditure on education) (SE.XPD.TERT.ZS)
+## Expenditure on secondary education (% of government expenditure on education) (SE.XPD.SECO.ZS)
+## Unemployment with secondary education (% of total unemployment) (SL.UEM.SECO.ZS)
+## Unemployment with tertiary education (% of total unemployment) (SL.UEM.TERT.ZS)
+## Trained teachers in upper secondary education (% of total teachers) (SE.SEC.TCAQ.UP.ZS) - No data
+## Researchers in R&D (per million people) (SP.POP.SCIE.RD.P6)
+## Technicians in R&D (per million people) (SP.POP.TECH.RD.P6)
