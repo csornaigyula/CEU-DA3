@@ -12,6 +12,7 @@ library(plm)
 # Does higher expenditure on education result higher high-tech export?
 ############################################################################
 
+
 ## STEP1: Acquiring data
 ## High-technology exports (% of manufactured exports) (TX.VAL.TECH.MF.ZS)
 ## Getting high tech data
@@ -268,17 +269,55 @@ fd6_panel <- myFDFunction(6)
 fd1 <-  lm(dhtech ~ deduex, data = fd1_panel)
 fd2 <-  lm(dhtech ~ deduex, data = fd2_panel)
 fd3 <-  lm(dhtech ~ deduex, data = fd3_panel)
+fd6 <-  lm(dhtech ~ deduex, data = fd6_panel)
 
 fewyd <- plm(hitech_exp_pct ~ edu_exp_gdppct + year, data = panelData, model = 'within')
 
 stargazer(
-  list(fd1, fd2, fd3, fewyd), digits = 2, 
-  column.labels = c('FD (lag=1)', 'FD (lag=2)', 'FD (lag=3)', 'FE w/ year dummies'),
+  list(fd1, fd2, fd3, fd6,fewyd), digits = 2, 
+  column.labels = c('FD', 'FD (lag=2)', 'FD (lag=3)', 'FD (lag=6)','FE w/ year dummies'),
   model.names = FALSE, dep.var.labels.include = FALSE, 
   dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
   single.row = TRUE,
   out="Models.html"
 )
+
+diff2 <- plm(
+  diff(hitech_exp_pct) ~ diff(edu_exp_gdppct) + stats::lag(diff(edu_exp_gdppct), 1:2),
+  data = panelData, model = 'pooling'
+)
+
+diff3 <- plm(
+  diff(hitech_exp_pct) ~ diff(edu_exp_gdppct) + stats::lag(diff(edu_exp_gdppct), 1:3),
+  data = panelData, model = 'pooling'
+)
+
+diff6 <- plm(
+  diff(hitech_exp_pct) ~ diff(edu_exp_gdppct) + stats::lag(diff(edu_exp_gdppct), 1:6),
+  data = panelData, model = 'pooling'
+)
+
+
+stargazer(
+  list(fd1, diff2, diff3, diff6), type = 'text',
+  column.labels = c('FD', 'FD with 2 lags', 'FD w/ 3 lags', 'FD w/ 6 lags'),
+  omit = 'year', digits = 2,
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  single.row = TRUE,
+  out="Models2.html"
+)
+
+stargazer(
+  list(fd1, fd2, diff2, fd3, diff3, fd6, diff6), type = 'text',
+  column.labels = c('FD', 'FD w/ 2 lags cum', 'FD w/ 2 lags', 'FD w/ 3 lags cum', 'FD w/ 3 lags', 'FD w/ 6 lags cum', 'FD w/ 6 lags'),
+  omit = 'year', digits = 2,
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  single.row = TRUE,
+  out="Models2B.html"
+)
+
 
 ## 4- Confounders 
 
@@ -307,6 +346,7 @@ panelCompletenessLTE <- dtLFTE[!is.na(dtLFTE$labf_pct_edut),
 ## Only the half is usable 
 
 ## Research and development expenditure (% of GDP) (GB.XPD.RSDV.GD.ZS)
+## ~60 usable
 rndExp = WDI(country=panelCountryVector,
              indicator='GB.XPD.RSDV.GD.ZS', 
              start=1999, end=2012)
@@ -316,7 +356,61 @@ panelCompletenessRNDP <- dtRNDP[!is.na(dtRNDP$gdp_rnd_pct),
                                .(cntC = .N),
                                by=year]
 
-## ~60 usable
+panelData2 <-  merge(panelData, dtRNDP, 
+                     by.x = c("iso2c", "year","country"), 
+                     by.y = c("iso2c", "year", "country") )
+
+panel2Completeness <- panelData2[ !is.na(panelData2$edu_exp_gdppct) & 
+                                    !is.na(panelData2$hitech_exp_pct) & 
+                                    !is.na(panelData2$gdp_rnd_pct),
+                                  .(cntY = .N),
+                                  by=iso2c]
+
+panelData2Final <- subset(panelData2, 
+                          panelData2$iso2c %in% 
+                            panel2Completeness[panel2Completeness$cntY >= 10]$iso2c  )
+
+myFDFunction2 <- function(lagSize){
+  fd_panel <- panelData2Final %>%
+    group_by(country) %>%
+    mutate(
+      lag_hitechexp = lag(hitech_exp_pct,lagSize),
+      lag_eduexp = lag(edu_exp_gdppct,lagSize), 
+      lag_gdp_rnd_pct = lag(gdp_rnd_pct,lagSize))%>%    
+    filter(!is.na(lag_hitechexp)) %>%
+    filter(!is.na(lag_eduexp)) %>%
+    mutate(
+      dhtech = hitech_exp_pct-lag_hitechexp,
+      deduex = edu_exp_gdppct - lag_eduexp,
+      drndex = gdp_rnd_pct - lag_gdp_rnd_pct
+    )
+  return(fd_panel)
+}
+
+fd1_panel2 <- myFDFunction2(1)
+fd2_panel2 <- myFDFunction2(2)
+fd3_panel2 <- myFDFunction2(3)
+fd6_panel2 <- myFDFunction2(6)
+
+fd1_2 <-  lm(dhtech ~ deduex + drndex, data = fd1_panel2)
+fd2_2 <-  lm(dhtech ~ deduex + drndex, data = fd2_panel2)
+fd3_2 <-  lm(dhtech ~ deduex + drndex, data = fd3_panel2)
+fd6_2 <-  lm(dhtech ~ deduex + drndex, data = fd6_panel2)
+
+fewyd2 <- plm(hitech_exp_pct ~ edu_exp_gdppct + gdp_rnd_pct + year, 
+             data = panelData2Final, model = 'within')
+
+stargazer(
+  list(fd1_2, fd2_2, fd3_2, fd6_2,fewyd2), digits = 2, 
+  column.labels = c('FD', 'FD (lag=2)', 'FD (lag=3)', 'FD (lag=6)','FE w/ year dummies'),
+  model.names = FALSE, 
+  dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%) Confounder: Research and development expenditure (% of GDP)',
+  single.row = TRUE,
+  out="Models3.html"
+)
+
+
 
 ## Expenditure on tertiary education (% of government expenditure on education) (SE.XPD.TERT.ZS)
 ## Expenditure on secondary education (% of government expenditure on education) (SE.XPD.SECO.ZS)
