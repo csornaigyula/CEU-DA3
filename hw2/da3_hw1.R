@@ -89,7 +89,14 @@ lpan <- subset(panelData, panelData$year > 2003 & panelData$year < 2014)
 ggplot(lpan)+aes(x=lngdppc, y=lnco2em)+
   geom_point(size=1, col='orange')+
   geom_smooth(method='lm')+
-  facet_grid(year~.)
+  facet_grid(year~.)+
+  labs(
+    x="Log GDDP per capita in the given year",
+    y="Log CO2 emission the given year",
+    title="Relationship between log CO2 emission and 
+    log GDP per capita  2004-2013"
+  )+
+  theme_bw()
 
 ggplot(panelData)+aes(x=lngdppc)+
   geom_histogram(fill='dodgerblue4')+

@@ -2,10 +2,7 @@
 title: 'DA3 assignment2: Panel data CO2'
 author: "CSORNAI, Gyula"
 date: "February 13, 2017"
-output:
-  word_document: default
-  pdf_document: default
-  html_document: default
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -174,7 +171,7 @@ column.labels = c('FD (lag=1)', 'FD (lag=1, crosscheck)', 'FD (lag=2)', 'FD (lag
 model.names = FALSE, dep.var.labels.include = FALSE, 
 dep.var.caption = 'Dependent variable: log(CO2)',omit = "Constant",
 single.row = TRUE,
-type="html"
+type="latex"
 )
 
 
@@ -226,7 +223,7 @@ stargazer(
   model.names = FALSE, dep.var.labels.include = FALSE, 
   dep.var.caption = 'Dependent variable: log(CO2)',
   single.row = TRUE,
-  type="html"
+  type="latex"
 )
 
 ```
@@ -347,7 +344,7 @@ stargazer(
   model.names = FALSE, dep.var.labels.include = FALSE, 
   dep.var.caption = 'Dependent variable: log(CO2)',omit = "Constant",
   single.row = TRUE,
-  type="html"
+  type="latex"
 )
 
 ```
@@ -434,7 +431,7 @@ stargazer(
   model.names = FALSE, dep.var.labels.include = FALSE, 
   dep.var.caption = 'Dependent variable: log(CO2), confounder GDP pct of industry added value',
   single.row = TRUE,
-  type="html"
+  type="latex"
 )
 
 ```
@@ -563,7 +560,7 @@ stargazer(
   model.names = FALSE, dep.var.labels.include = FALSE, 
   dep.var.caption = 'Dependent variable: log(CO2)',
   single.row = TRUE,
-  type="html"
+  type="latex"
 )
 ```
 

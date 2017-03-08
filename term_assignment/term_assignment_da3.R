@@ -272,12 +272,13 @@ fd3 <-  lm(dhtech ~ deduex, data = fd3_panel)
 fd6 <-  lm(dhtech ~ deduex, data = fd6_panel)
 
 fewyd <- plm(hitech_exp_pct ~ edu_exp_gdppct + year, data = panelData, model = 'within')
-
+getwd()
+setwd("..\\temp\\rWorkDir\\da3")
 stargazer(
   list(fd1, fd2, fd3, fd6,fewyd), digits = 2, 
   column.labels = c('FD', 'FD (lag=2)', 'FD (lag=3)', 'FD (lag=6)','FE w/ year dummies'),
   model.names = FALSE, dep.var.labels.include = FALSE, 
-  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  dep.var.caption = 'Dependent variable: High-tech export% of all exports',
   single.row = TRUE,
   out="Models.html"
 )
@@ -303,7 +304,7 @@ stargazer(
   column.labels = c('FD', 'FD with 2 lags', 'FD w/ 3 lags', 'FD w/ 6 lags'),
   omit = 'year', digits = 2,
   model.names = FALSE, dep.var.labels.include = FALSE, 
-  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  dep.var.caption = 'Dependent variable: High-tech export% of all exports',
   single.row = TRUE,
   out="Models2.html"
 )
@@ -313,7 +314,7 @@ stargazer(
   column.labels = c('FD', 'FD w/ 2 lags cum', 'FD w/ 2 lags', 'FD w/ 3 lags cum', 'FD w/ 3 lags', 'FD w/ 6 lags cum', 'FD w/ 6 lags'),
   omit = 'year', digits = 2,
   model.names = FALSE, dep.var.labels.include = FALSE, 
-  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%)',
+  dep.var.caption = 'Dependent variable: High-tech export% of all exports',
   single.row = TRUE,
   out="Models2B.html"
 )
@@ -356,66 +357,297 @@ panelCompletenessRNDP <- dtRNDP[!is.na(dtRNDP$gdp_rnd_pct),
                                .(cntC = .N),
                                by=year]
 
-panelData2 <-  merge(panelData, dtRNDP, 
+## Researchers in R&D (per million people) (SP.POP.SCIE.RD.P6)
+rndResPmp = WDI(country=panelCountryVector,
+             indicator='SP.POP.SCIE.RD.P6', 
+             start=1999, end=2012)
+names(rndResPmp)[names(rndResPmp) == "SP.POP.SCIE.RD.P6"] = "rnd_res_pmp"
+dtRndResPmp <- data.table(rndResPmp)
+panelCompletenessRndResPmp <- dtRndResPmp[!is.na(dtRndResPmp$rnd_res_pmp),
+                                .(cntC = .N),
+                                by=year]
+
+## Technicians in R&D (per million people) (SP.POP.TECH.RD.P6)
+rndTechPmp = WDI(country=panelCountryVector,
+                indicator='SP.POP.TECH.RD.P6', 
+                start=1999, end=2012)
+names(rndTechPmp)[names(rndTechPmp) == "SP.POP.TECH.RD.P6"] = "rnd_tech_pmp"
+dtRndTechPmp <- data.table(rndTechPmp)
+panelCompletenessRndTechPmp <- dtRndTechPmp[!is.na(dtRndTechPmp$rnd_tech_pmp),
+                                          .(cntC = .N),
+                                          by=year]
+
+
+gigapanelRaw <- merge(panelData,dtLFSE,
+                      by.x = c("iso2c", "year","country"), 
+                      by.y = c("iso2c", "year", "country") )
+
+gigapanelRaw <- merge(gigapanelRaw,dtLFTE,
+                      by.x = c("iso2c", "year","country"), 
+                      by.y = c("iso2c", "year", "country") ) 
+
+gigapanelRaw <- merge(gigapanelRaw,dtRNDP,
+                      by.x = c("iso2c", "year","country"), 
+                      by.y = c("iso2c", "year", "country") )
+
+gigapanelRaw <- merge(gigapanelRaw,rndResPmp,
+                      by.x = c("iso2c", "year","country"), 
+                      by.y = c("iso2c", "year", "country") )
+
+gigapanelRaw <- merge(gigapanelRaw,rndTechPmp,
+                      by.x = c("iso2c", "year","country"), 
+                      by.y = c("iso2c", "year", "country") )
+ 
+str(gigapanelRaw)
+
+panelCompletenessGigaPanel <- gigapanelRaw[!is.na(gigapanelRaw$rnd_tech_pmp)&
+                                              !is.na(gigapanelRaw$edu_exp_gdppct)&
+                                              !is.na(gigapanelRaw$hitech_exp_pct)&
+                                              !is.na(gigapanelRaw$labf_pct_edus)&
+                                              !is.na(gigapanelRaw$labf_pct_edut)&
+                                              !is.na(gigapanelRaw$gdp_rnd_pct)&
+                                              !is.na(gigapanelRaw$rnd_res_pmp),
+                                            .(cntC = .N),
+                                            by=year] 
+
+panelCompletenessGigaPanel2 <- gigapanelRaw[!is.na(gigapanelRaw$rnd_tech_pmp)&
+                                             !is.na(gigapanelRaw$edu_exp_gdppct)&
+                                             !is.na(gigapanelRaw$hitech_exp_pct)&
+                                             !is.na(gigapanelRaw$labf_pct_edus)&
+                                             !is.na(gigapanelRaw$labf_pct_edut)&
+                                             !is.na(gigapanelRaw$gdp_rnd_pct)&
+                                             !is.na(gigapanelRaw$rnd_res_pmp),
+                                           .(cntY = .N),
+                                           by=iso2c ]
+
+gigaPanel <- subset(gigapanelRaw, 
+                    gigapanelRaw$iso2c %in% 
+                      panelCompletenessGigaPanel2[panelCompletenessGigaPanel2$cntY >= 10]$iso2c  )
+
+myFDFunctionG <- function(lagSize){
+  fd_panel <- gigaPanel %>%
+    group_by(country) %>%
+    mutate(
+      lag_hitechexp = lag(hitech_exp_pct,lagSize),
+      lag_rnd_tech_pmp = lag(rnd_tech_pmp,lagSize),
+      lag_rnd_res_pmp = lag(rnd_res_pmp,lagSize),
+      lag_labf_pct_edus = lag(labf_pct_edus,lagSize),
+      lag_labf_pct_edut = lag(labf_pct_edut,lagSize),
+      lag_gdp_rnd_pct = lag(gdp_rnd_pct,lagSize),
+      lag_edu_exp_gdppct = lag(edu_exp_gdppct,lagSize)) %>%    
+    filter(!is.na(lag_hitechexp)) %>%
+    filter(!is.na(lag_rnd_tech_pmp)) %>%
+    filter(!is.na(lag_rnd_res_pmp)) %>%
+    filter(!is.na(lag_labf_pct_edus)) %>%
+    filter(!is.na(lag_labf_pct_edut)) %>%
+    filter(!is.na(lag_gdp_rnd_pct)) %>%
+    filter(!is.na(lag_edu_exp_gdppct)) %>%
+    mutate(
+      dhitechexp = hitech_exp_pct-lag_hitechexp,
+      dedu_exp_gdppct = edu_exp_gdppct - lag_edu_exp_gdppct,
+      drnd_tech_pmp = rnd_tech_pmp - lag_rnd_tech_pmp,
+      drnd_res_pmp = rnd_res_pmp - lag_rnd_tech_pmp,
+      dlabf_pct_edus = labf_pct_edus - lag_labf_pct_edus,
+      dlabf_pct_edut = labf_pct_edut - lag_labf_pct_edut,
+      dgdp_rnd_pct = gdp_rnd_pct - lag_gdp_rnd_pct
+    )
+  return(fd_panel)
+}
+
+fd1_gpanel <- myFDFunctionG(1)
+fd2_gpanel <- myFDFunctionG(2)
+fd3_gpanel <- myFDFunctionG(3)
+fd6_gpanel <- myFDFunctionG(6)
+
+fd1g <-  lm(dhitechexp ~ dedu_exp_gdppct + drnd_tech_pmp + drnd_res_pmp +
+              dlabf_pct_edus + dlabf_pct_edut + dgdp_rnd_pct
+            , data = fd1_gpanel)
+fd2g <-  lm(dhitechexp ~ dedu_exp_gdppct + drnd_tech_pmp + drnd_res_pmp +
+              dlabf_pct_edus + dlabf_pct_edut + dgdp_rnd_pct
+            , data = fd2_gpanel)
+
+fd3g <-  lm(dhitechexp ~ dedu_exp_gdppct + drnd_tech_pmp + drnd_res_pmp +
+              dlabf_pct_edus + dlabf_pct_edut + dgdp_rnd_pct
+            , data = fd3_gpanel)
+
+fd6g <-  lm(dhitechexp ~ dedu_exp_gdppct + drnd_tech_pmp + drnd_res_pmp +
+              dlabf_pct_edus + dlabf_pct_edut + dgdp_rnd_pct
+            , data = fd6_gpanel)
+
+fewydg <- plm(hitech_exp_pct ~ edu_exp_gdppct + labf_pct_edus + labf_pct_edut +
+                gdp_rnd_pct + rnd_res_pmp + rnd_tech_pmp + year, 
+              data = gigaPanel, model = 'within')
+
+stargazer(
+  list(fd1g, fd2g, fd3g,  fd6g, fewydg), type = 'text',
+  column.labels = c('FD', 'FD w/ 2 lags cum', 'FD w/ 3 lags cum',  'FD w/ 6 lags cum', 'FE'),
+  digits = 2,
+  model.names = FALSE, dep.var.labels.include = FALSE, 
+  dep.var.caption = 'Dependent variable: High-tech export% of all exports',
+  single.row = TRUE,
+  out="Models3.html"
+)
+
+
+## High tech export volume USD
+htexpUSD = WDI(country=panelCountryVector,
+               indicator='TX.VAL.TECH.CD', 
+               start=1999, end=2012)
+names(htexpUSD)[names(htexpUSD) == "TX.VAL.TECH.CD"] = "ht_usd_level"
+dtHTEUSD <- data.table(htexpUSD)
+panelCompletenessHteUsd <- dtHTEUSD[!is.na(dtHTEUSD$ht_usd_level),
+                                    .(cntC = .N),
+                                    by=year]
+
+panelData2 <-  merge(panelData, htexpUSD, 
                      by.x = c("iso2c", "year","country"), 
                      by.y = c("iso2c", "year", "country") )
 
 panel2Completeness <- panelData2[ !is.na(panelData2$edu_exp_gdppct) & 
-                                    !is.na(panelData2$hitech_exp_pct) & 
-                                    !is.na(panelData2$gdp_rnd_pct),
+                                    !is.na(panelData2$ht_usd_level) ,
                                   .(cntY = .N),
                                   by=iso2c]
 
 panelData2Final <- subset(panelData2, 
                           panelData2$iso2c %in% 
                             panel2Completeness[panel2Completeness$cntY >= 10]$iso2c  )
+panelData2Final <- subset(panelData2Final, panelData2Final$ht_usd_level > 0)
+panelData2Final$log_htusd = log(panelData2Final$ht_usd_level)
 
-myFDFunction2 <- function(lagSize){
+myFDFunctionNew <- function(lagSize){
   fd_panel <- panelData2Final %>%
     group_by(country) %>%
     mutate(
-      lag_hitechexp = lag(hitech_exp_pct,lagSize),
       lag_eduexp = lag(edu_exp_gdppct,lagSize), 
-      lag_gdp_rnd_pct = lag(gdp_rnd_pct,lagSize))%>%    
-    filter(!is.na(lag_hitechexp)) %>%
+      lag_log_htusd = lag (log_htusd, lagSize))%>%    
+    filter(!is.na(lag_log_htusd)) %>%
     filter(!is.na(lag_eduexp)) %>%
     mutate(
-      dhtech = hitech_exp_pct-lag_hitechexp,
       deduex = edu_exp_gdppct - lag_eduexp,
-      drndex = gdp_rnd_pct - lag_gdp_rnd_pct
+      dloghtusd = log_htusd - lag_log_htusd
     )
   return(fd_panel)
 }
 
-fd1_panel2 <- myFDFunction2(1)
-fd2_panel2 <- myFDFunction2(2)
-fd3_panel2 <- myFDFunction2(3)
-fd6_panel2 <- myFDFunction2(6)
+fd1panel_new <- myFDFunctionNew(1)
+fd1panel_new <- subset(fd1panel_new, !is.na(fd1panel_new$deduex) & !is.na(fd1panel_new$dloghtusd))
+fd2panel_new <- myFDFunctionNew(2)
+fd3panel_new <- myFDFunctionNew(3)
+fd4panel_new <- myFDFunctionNew(4)
+fd5panel_new <- myFDFunctionNew(5)
+fd6panel_new <- myFDFunctionNew(6)
 
-fd1_2 <-  lm(dhtech ~ deduex + drndex, data = fd1_panel2)
-fd2_2 <-  lm(dhtech ~ deduex + drndex, data = fd2_panel2)
-fd3_2 <-  lm(dhtech ~ deduex + drndex, data = fd3_panel2)
-fd6_2 <-  lm(dhtech ~ deduex + drndex, data = fd6_panel2)
+fdm1_new <-  lm(dloghtusd ~ deduex , data = fd1panel_new)
+fdm2_new <-  lm(dloghtusd ~ deduex , data = fd2panel_new)
+fdm3_new <-  lm(dloghtusd ~ deduex , data = fd3panel_new)
+fdm4_new <-  lm(dloghtusd ~ deduex , data = fd4panel_new)
+fdm5_new <-  lm(dloghtusd ~ deduex , data = fd5panel_new)
+fdm6_new <-  lm(dloghtusd ~ deduex , data = fd6panel_new)
 
-fewyd2 <- plm(hitech_exp_pct ~ edu_exp_gdppct + gdp_rnd_pct + year, 
-             data = panelData2Final, model = 'within')
+fewyd_new <- plm(log_htusd ~ edu_exp_gdppct +  year, 
+              data = panelData2Final, model = 'within')
 
-stargazer(
-  list(fd1_2, fd2_2, fd3_2, fd6_2,fewyd2), digits = 2, 
-  column.labels = c('FD', 'FD (lag=2)', 'FD (lag=3)', 'FD (lag=6)','FE w/ year dummies'),
-  model.names = FALSE, 
-  dep.var.labels.include = FALSE, 
-  dep.var.caption = 'Dependent variable: Government expenditure on education (GDP%) Confounder: Research and development expenditure (% of GDP)',
-  single.row = TRUE,
-  out="Models3.html"
+stargazer(fdm1_new,fdm2_new,fdm3_new,fdm4_new,fdm5_new,fdm6_new, fewyd_new, type = 'text',
+            column.labels = c('FD', 'FD w/ 2 lags', 'FD w/ 3 lags', 'FD w/ 4 lags', 'FD w/ 5 lags', 'FD w/ 6 lags', 'FE'),
+            digits = 2,
+            model.names = FALSE, dep.var.labels.include = FALSE, 
+            dep.var.caption = 'Dependent variable: Log(High-tech export value USD)',
+            single.row = TRUE,
+            out="Models5.html"
 )
 
 
 
+## High tech export USD TX.VAL.TECH.CD
 ## Expenditure on tertiary education (% of government expenditure on education) (SE.XPD.TERT.ZS)
 ## Expenditure on secondary education (% of government expenditure on education) (SE.XPD.SECO.ZS)
 ## Unemployment with secondary education (% of total unemployment) (SL.UEM.SECO.ZS)
 ## Unemployment with tertiary education (% of total unemployment) (SL.UEM.TERT.ZS)
 ## Trained teachers in upper secondary education (% of total teachers) (SE.SEC.TCAQ.UP.ZS) - No data
-## Researchers in R&D (per million people) (SP.POP.SCIE.RD.P6)
-## Technicians in R&D (per million people) (SP.POP.TECH.RD.P6)
+
+aggData2 <- panelData2Final[,
+                     .(annualAvgEdu = mean(edu_exp_gdppct, na.rm = TRUE),
+                       annualAvgHTexp = mean(log_htusd, na.rm = TRUE)),
+                     by=year]
+
+
+
+
+ggplot()+
+  geom_line(data=aggData2, aes(x=year, y=annualAvgEdu), col='indianred')+
+  geom_line(data=aggData2, aes(x=year, y=annualAvgHTexp), col='dodgerblue4')+
+  labs(
+    x='Years',
+    y='Average of value',
+    title='Trends of log high-tech export USD  and Government expenditure on education (GDP%) levels'
+  )+
+  geom_vline(aes(xintercept=2006),col='red',linetype='dotted')+
+  geom_vline(aes(xintercept=2008),col='red',linetype='dotted')+
+  geom_vline(aes(xintercept=2009),col='red',linetype='dotted')+
+  geom_label(
+    aes(x=min(aggData2$year) , y=mean(aggData2$annualAvgEdu)), 
+    label='Average government expenditure\non education (GDP%)\nacross countries where data is available',
+    nudge_x = nrow(aggData2)*0.5, 
+    nudge_y=-2, size=4)+
+  geom_label(
+    aes(x=min(aggData2$year) , y=mean(aggData2$annualAvgHTexp)), 
+    label='Average log high-tech export USD\nacross countries where data is available',
+    nudge_x = nrow(aggData2)*0.5, 
+    nudge_y=-2, size=4)+
+  geom_label(
+    aes(x=2006, y=max(aggData2$annualAvgHTexp +3)),
+    label='2006',
+    size=3)+
+  geom_label(
+    aes(x=2008, y=max(aggData2$annualAvgHTexp +3)),
+    label='2008',
+    size=3)+
+  geom_label(
+    aes(x=2009, y=max(aggData2$annualAvgHTexp +3)),
+    label='2009',
+    size=3)+
+  xlim(min(aggData2$year), max(aggData2$year))+
+  ylim(0, max(aggData2$annualAvgHTexp +3))+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=-90, hjust=0.5, size=8))
+aed <- mean(aggData2$annualAvgEdu)
+aex <- mean(aggData2$annualAvgHTexp)
+aggData2$annualAvgEdu <- aggData2$annualAvgEdu - aed
+aggData2$annualAvgHTexp <- aggData2$annualAvgHTexp - aex
+
+ggplot()+
+  geom_line(data=aggData2, aes(x=year, y=annualAvgEdu), col='indianred')+
+  geom_line(data=aggData2, aes(x=year, y=annualAvgHTexp), col='dodgerblue4')+
+  labs(
+    x='Years',
+    y='Difference from the average',
+    title='Trends of log high-tech export USD  and Government expenditure on education (GDP%)\ndifferences from average'
+  )+
+  geom_vline(aes(xintercept=2006),col='red',linetype='dotted')+
+  geom_vline(aes(xintercept=2008),col='red',linetype='dotted')+
+  geom_vline(aes(xintercept=2009),col='red',linetype='dotted')+
+  geom_label(
+    aes(x=min(aggData2$year) , y=mean(aggData2$annualAvgEdu)), 
+    label='Average government expenditure\non education (GDP%)\nacross countries where data is available',
+    nudge_x = nrow(aggData2)*0.5, 
+    nudge_y=-0.5, size=3)+
+  geom_label(
+    aes(x=min(aggData2$year) , y=max(aggData2$annualAvgHTexp)), 
+    label='Average log high-tech export USD\nacross countries where data is available',
+    nudge_x = nrow(aggData2)*0.5, 
+    nudge_y=0.5, size=3)+
+  geom_label(
+    aes(x=2006, y=max(aggData2$annualAvgHTexp +1)),
+    label='2006',
+    size=3)+
+  geom_label(
+    aes(x=2008, y=max(aggData2$annualAvgHTexp +1)),
+    label='2008',
+    size=3)+
+  geom_label(
+    aes(x=2009, y=max(aggData2$annualAvgHTexp +1)),
+    label='2009',
+    size=3)+
+  xlim(min(aggData2$year), max(aggData2$year))+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=-90, hjust=0.5, size=8))
